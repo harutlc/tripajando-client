@@ -31,14 +31,14 @@ jobs:
         with:
           node-version: '22'
           cache: 'npm'
-          cache-dependency-path: client/package-lock.json
+          cache-dependency-path: package-lock.json
 
       - name: Install dependencies
-        working-directory: ./client
+        working-directory: ./
         run: npm ci
 
       - name: Build application
-        working-directory: ./client
+        working-directory: ./
         run: npm run build
         env:
           VITE_AUTH0_DOMAIN: ${{ secrets[format('VITE_AUTH0_DOMAIN_{0}', env.ENVIRONMENT)] }}
@@ -65,7 +65,7 @@ jobs:
           fi
 
       - name: Sync files to S3
-        working-directory: ./client
+        working-directory: ./
         run: |
           aws s3 sync dist/ s3://${{ steps.get-bucket.outputs.bucket }} \
             --delete \

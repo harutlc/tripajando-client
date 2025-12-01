@@ -36,7 +36,7 @@ createRoot(rootElement).render(
             clientId={clientId || ''}
             authorizationParams={{
                 redirect_uri: window.location.origin + "/callback",
-                audience: "https://api.tribajando.com", // Your API identifier
+                audience: "https://api.tripajando.com", // Your API identifier
                 scope: "openid profile email" // Add any custom scopes you need
             }}
             onRedirectCallback={onRedirectCallback}

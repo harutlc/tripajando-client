@@ -188,12 +188,211 @@ To enable this, you need to:
 1. Set up an API in Auth0 Dashboard
 2. Add the API identifier as `audience` in the Auth0Provider configuration in `main.tsx`
 
+## Infrastructure Setup
+
+### AWS Infrastructure with Terraform
+
+The project uses Terraform to manage AWS infrastructure for both dev and prod environments.
+
+#### Prerequisites
+
+- AWS CLI configured with appropriate credentials
+- Terraform 1.x installed
+- Route 53 hosted zone configured for your domain
+
+#### Terraform Workspaces
+
+The project uses Terraform workspaces to separate dev and prod state:
+
+- `default` workspace - Production environment
+- `dev` workspace - Development environment
+
+#### Initial Infrastructure Setup
+
+1. **Configure AWS credentials:**
+
+```bash
+aws configure
+# Enter your AWS Access Key ID, Secret Access Key, and region (us-east-1)
+```
+
+2. **Verify AWS credentials:**
+
+```bash
+aws sts get-caller-identity
+```
+
+3. **Initialize Terraform:**
+
+```bash
+cd terraform
+terraform init
+```
+
+4. **Deploy Dev Environment:**
+
+```bash
+# Create and switch to dev workspace
+terraform workspace new dev
+
+# Review the plan
+terraform plan -var-file="environments/dev/terraform.tfvars"
+
+# Apply the configuration
+terraform apply -var-file="environments/dev/terraform.tfvars"
+```
+
+5. **Deploy Prod Environment:**
+
+```bash
+# Switch to default workspace (prod)
+terraform workspace select default
+
+# Review the plan
+terraform plan -var-file="environments/prod/terraform.tfvars"
+
+# Apply the configuration
+terraform apply -var-file="environments/prod/terraform.tfvars"
+```
+
+#### Infrastructure Components
+
+Each environment creates:
+- **S3 Bucket** - Static website hosting with versioning
+- **CloudFront Distribution** - CDN with custom domain and SSL
+- **ACM Certificate** - SSL/TLS certificate (auto-validated via DNS)
+- **Route 53 Records** - A and AAAA records for the domain
+- **Origin Access Identity** - Secure CloudFront to S3 access
+
+#### Environment Configuration Files
+
+- `terraform/environments/dev/terraform.tfvars` - Dev environment variables
+- `terraform/environments/prod/terraform.tfvars` - Prod environment variables
+
+### GitHub Actions Setup
+
+The project includes CI/CD with GitHub Actions for automatic deployments.
+
+#### Setting Up GitHub Environments
+
+1. **Go to your repository on GitHub**
+2. **Navigate to Settings → Environments**
+
+3. **Create Dev Environment:**
+   - Click "New environment"
+   - Name: `dev`
+   - Add environment variables (Variables tab):
+     - `VITE_API_BASE_URL` = `https://api-dev.tripajando.com`
+     - `S3_BUCKET_NAME` = `tripajando-dev-website`
+   - Add environment secrets (Secrets tab):
+     - `VITE_AUTH0_DOMAIN` = Your Auth0 domain
+     - `VITE_AUTH0_CLIENT_ID` = Your Auth0 client ID
+     - `VITE_AUTH0_AUDIENCE` = Your Auth0 API audience
+     - `CLOUDFRONT_DISTRIBUTION_ID` = Get from Terraform output
+
+4. **Create Prod Environment:**
+   - Click "New environment"
+   - Name: `prod`
+   - Add environment variables (Variables tab):
+     - `VITE_API_BASE_URL` = `https://api.tripajando.com`
+     - `S3_BUCKET_NAME` = `tripajando-prod-website`
+   - Add environment secrets (Secrets tab):
+     - `VITE_AUTH0_DOMAIN` = Your Auth0 domain
+     - `VITE_AUTH0_CLIENT_ID` = Your Auth0 client ID
+     - `VITE_AUTH0_AUDIENCE` = Your Auth0 API audience
+     - `CLOUDFRONT_DISTRIBUTION_ID` = Get from Terraform output
+
+5. **Add Repository Secrets** (Settings → Secrets and variables → Actions):
+   - `AWS_ACCESS_KEY_ID` - Your AWS access key
+   - `AWS_SECRET_ACCESS_KEY` - Your AWS secret key
+
+#### Getting CloudFront Distribution IDs
+
+After applying Terraform, get the CloudFront distribution IDs:
+
+```bash
+# For dev
+terraform workspace select dev
+terraform output cloudfront_distribution_id
+
+# For prod
+terraform workspace select default
+terraform output cloudfront_distribution_id
+```
+
+#### Deployment Workflow
+
+The GitHub Actions workflow automatically deploys when:
+- Push to `main` branch → Deploys to production
+- Push to `dev` branch → Deploys to development
+- Manual trigger → Choose environment
+
+### Manual Deployment
+
+If you need to deploy manually:
+
+```bash
+# Build the application
+npm run build
+
+# Deploy to dev
+aws s3 sync dist/ s3://tripajando-dev-website --delete
+aws cloudfront create-invalidation --distribution-id E2UHS1MIUUI19Q --paths "/*"
+
+# Deploy to prod
+aws s3 sync dist/ s3://tripajando-prod-website --delete
+aws cloudfront create-invalidation --distribution-id E1A3CHIUQ5NRIF --paths "/*"
+```
+
+### Environment URLs
+
+After deployment, your application will be available at:
+- **Dev**: https://dev.tripajando.com
+- **Prod**: https://tripajando.com
+
+DNS propagation may take a few minutes after initial setup.
+
+## Complete Setup Checklist
+
+### Local Development
+- [ ] Install Node.js 22.x
+- [ ] Clone repository
+- [ ] Run `npm install`
+- [ ] Create `.env` file with Auth0 credentials
+- [ ] Start dev server with `npm run dev`
+
+### AWS Infrastructure
+- [ ] Configure AWS CLI
+- [ ] Update `terraform/environments/dev/terraform.tfvars`
+- [ ] Update `terraform/environments/prod/terraform.tfvars`
+- [ ] Initialize Terraform
+- [ ] Deploy dev environment
+- [ ] Deploy prod environment
+- [ ] Note CloudFront distribution IDs
+
+### GitHub Configuration
+- [ ] Create `dev` environment in GitHub
+- [ ] Add dev environment variables and secrets
+- [ ] Create `prod` environment in GitHub
+- [ ] Add prod environment variables and secrets
+- [ ] Add AWS credentials as repository secrets
+- [ ] Test workflow by pushing to dev branch
+
+### Auth0 Configuration
+- [ ] Create Auth0 application
+- [ ] Configure allowed URLs for dev (`http://localhost:3000`, `https://dev.tripajando.com`)
+- [ ] Configure allowed URLs for prod (`https://tripajando.com`)
+- [ ] Update GitHub environment secrets with Auth0 credentials
+
 ## Next Steps
 
 1. Configure your Auth0 application
 2. Update `.env` with your Auth0 credentials
 3. Start the development server
-4. Customize the theme and styling
-5. Add more features to Dashboard, Profile, and Settings pages
-6. Set up your backend API (optional)
-7. Add tests
+4. Set up AWS infrastructure with Terraform
+5. Configure GitHub environments and secrets
+6. Test deployment to dev environment
+7. Customize the theme and styling
+8. Add more features to Dashboard, Profile, and Settings pages
+9. Set up your backend API (optional)
+10. Add tests

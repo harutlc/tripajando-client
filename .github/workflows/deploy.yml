@@ -1,0 +1,85 @@
+name: Deploy to AWS
+
+on:
+  push:
+    branches:
+      - main        # Deploy to production
+      - dev     # Deploy to development
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy to'
+        required: true
+        type: choice
+        options:
+          - dev
+          - prod
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment || (github.ref == 'refs/heads/main' && 'prod' || 'dev') }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        working-directory: ./
+        run: npm ci
+
+      - name: Build application
+        working-directory: ./
+        run: npm run build
+        env:
+          VITE_AUTH0_DOMAIN: ${{ secrets.VITE_AUTH0_DOMAIN }}
+          VITE_AUTH0_CLIENT_ID: ${{ secrets.VITE_AUTH0_CLIENT_ID }}
+          VITE_AUTH0_AUDIENCE: ${{ secrets.VITE_AUTH0_AUDIENCE }}
+          VITE_API_BASE_URL: ${{ vars.VITE_API_BASE_URL }}
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - name: Get deployment configuration
+        id: get-config
+        run: |
+          echo "bucket=${{ vars.S3_BUCKET_NAME }}" >> $GITHUB_OUTPUT
+          echo "distribution_id=${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }}" >> $GITHUB_OUTPUT
+
+      - name: Sync files to S3
+        working-directory: ./
+        run: |
+          aws s3 sync dist/ s3://${{ steps.get-config.outputs.bucket }} \
+            --delete \
+            --cache-control "public, max-age=31536000, immutable" \
+            --exclude "index.html" \
+            --exclude "*.txt"
+
+          # Upload index.html with no-cache to ensure latest version is always served
+          aws s3 cp dist/index.html s3://${{ steps.get-config.outputs.bucket }}/index.html \
+            --cache-control "public, max-age=0, must-revalidate"
+
+      - name: Invalidate CloudFront cache
+        run: |
+          aws cloudfront create-invalidation \
+            --distribution-id ${{ steps.get-config.outputs.distribution_id }} \
+            --paths "/*"
+
+      - name: Deployment summary
+        run: |
+          if [ "${{ job.environment }}" == "prod" ]; then
+            echo "🚀 Deployed to Production: https://tripajando.com"
+          else
+            echo "🚀 Deployed to Development: https://dev.tripajando.com"
+          fi

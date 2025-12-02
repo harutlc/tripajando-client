@@ -18,9 +18,7 @@ on:
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
-
-    env:
-      ENVIRONMENT: ${{ github.ref == 'refs/heads/main' && 'prod' || 'dev' }}
+    environment: ${{ github.event.inputs.environment || (github.ref == 'refs/heads/main' && 'prod' || 'dev') }}
 
     steps:
       - name: Checkout code
@@ -41,10 +39,10 @@ jobs:
         working-directory: ./
         run: npm run build
         env:
-          VITE_AUTH0_DOMAIN: ${{ secrets[format('VITE_AUTH0_DOMAIN_{0}', upper(env.ENVIRONMENT))] }}
-          VITE_AUTH0_CLIENT_ID: ${{ secrets[format('VITE_AUTH0_CLIENT_ID_{0}', upper(env.ENVIRONMENT))] }}
-          VITE_AUTH0_AUDIENCE: ${{ secrets[format('VITE_AUTH0_AUDIENCE_{0}', upper(env.ENVIRONMENT))] }}
-          VITE_API_BASE_URL: ${{ secrets[format('VITE_API_BASE_URL_{0}', upper(env.ENVIRONMENT))] }}
+          VITE_AUTH0_DOMAIN: ${{ secrets.VITE_AUTH0_DOMAIN }}
+          VITE_AUTH0_CLIENT_ID: ${{ secrets.VITE_AUTH0_CLIENT_ID }}
+          VITE_AUTH0_AUDIENCE: ${{ secrets.VITE_AUTH0_AUDIENCE }}
+          VITE_API_BASE_URL: ${{ secrets.VITE_API_BASE_URL }}
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -56,13 +54,12 @@ jobs:
       - name: Get S3 bucket name
         id: get-bucket
         run: |
-          if [ "${{ env.ENVIRONMENT }}" == "prod" ]; then
+          if [ "${{ job.environment }}" == "prod" ]; then
             echo "bucket=tripajando-prod-website" >> $GITHUB_OUTPUT
-            echo "distribution_id=${{ secrets.CLOUDFRONT_DISTRIBUTION_ID_PROD }}" >> $GITHUB_OUTPUT
           else
             echo "bucket=tripajando-dev-website" >> $GITHUB_OUTPUT
-            echo "distribution_id=${{ secrets.CLOUDFRONT_DISTRIBUTION_ID_DEV }}" >> $GITHUB_OUTPUT
           fi
+          echo "distribution_id=${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }}" >> $GITHUB_OUTPUT
 
       - name: Sync files to S3
         working-directory: ./
@@ -85,7 +82,7 @@ jobs:
 
       - name: Deployment summary
         run: |
-          if [ "${{ env.ENVIRONMENT }}" == "prod" ]; then
+          if [ "${{ job.environment }}" == "prod" ]; then
             echo "🚀 Deployed to Production: https://tripajando.com"
           else
             echo "🚀 Deployed to Development: https://dev.tripajando.com"

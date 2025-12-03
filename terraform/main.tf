@@ -8,12 +8,14 @@ terraform {
     }
   }
 
-  # Optional: Configure backend for state management
-  # backend "s3" {
-  #   bucket = "tripajando-terraform-state"
-  #   key    = "terraform.tfstate"
-  #   region = "us-east-1"
-  # }
+  # Backend configuration for remote state management
+  backend "s3" {
+    bucket         = "tripajando-terraform-state"
+    key            = "terraform.tfstate"
+    region         = "us-east-1"
+    dynamodb_table = "tripajando-terraform-locks"
+    encrypt        = true
+  }
 }
 
 provider "aws" {
